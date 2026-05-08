@@ -1,10 +1,5 @@
 {
   "version": 2,
-  "functions": {
-    "api/**/*.js": {
-      "runtime": "nodejs20.x"
-    }
-  },
   "env": {
     "WAF_URL": "https://firewall-o5y1.onrender.com"
   },
