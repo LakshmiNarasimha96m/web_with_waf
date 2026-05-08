@@ -116,10 +116,10 @@
 
         const data = await res.json();
 
-        // 🚨 WAF BLOCK
-        if (data.error) {
-          messageBox.innerHTML = "🚨 " + data.error +
-            (data.attack ? " (" + data.attack + ")" : "");
+        // 🚫 WAF / server-side block (API returns 403 with { blocked: true, message })
+        if (!res.ok || data.blocked || data.error) {
+          const msg = data.message || data.error || "Request blocked.";
+          messageBox.textContent = msg;
           return;
         }
 

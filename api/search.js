@@ -18,7 +18,11 @@ export default async function handler(req, res) {
   // ── WAF check ────────────────────────────────────────────────────────────
   const waf = await checkWAF(searchTerm, 'search');
   if (waf.blocked) {
-    return res.status(403).json({ blocked: true, message: waf.message });
+    return res.status(403).json({
+      blocked: true,
+      message: waf.message,
+      error: waf.message,
+    });
   }
 
   // ── Normal search ────────────────────────────────────────────────────────
