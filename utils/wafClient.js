@@ -12,25 +12,6 @@ import { inspectInput } from './wafRules.js';
 
 const WAF_URL = process.env.WAF_URL || 'https://firewall-o5y1.onrender.com';
 
-async function parseJsonResponse(response) {
-  const contentType = (response.headers.get('content-type') || '').toLowerCase();
-  const text = await response.text();
-
-  if (!contentType.includes('application/json')) {
-    const preview = text.slice(0, 120).replace(/\s+/g, ' ').trim();
-    throw new Error(
-      `Non-JSON response (status=${response.status}, content-type=${contentType || 'unknown'}) preview="${preview}"`
-    );
-  }
-
-  try {
-    return JSON.parse(text);
-  } catch (err) {
-    const preview = text.slice(0, 120).replace(/\s+/g, ' ').trim();
-    throw new Error(`Invalid JSON (status=${response.status}) preview="${preview}"`);
-  }
-}
-
 /**
  * checkWAF(payload, source)
  * Returns: { blocked: true } or { blocked: false }
@@ -50,7 +31,7 @@ export async function checkWAF(payload, source = 'api') {
       body: JSON.stringify({ payload: str, source }),
     });
 
-    const data = await parseJsonResponse(wafRes);
+    const data = await wafRes.json();
 
     if (data.block === true) {
       console.warn(
@@ -64,9 +45,7 @@ export async function checkWAF(payload, source = 'api') {
 
   } catch (err) {
     // ── Fallback: local signature rules ──────────────────────────────────
-    console.error(
-      '[WAF UNREACHABLE] source=' + source + ' | error=' + (err && err.message ? err.message : String(err))
-    );
+    console.error('[WAF UNREACHABLE] source=' + source + ' | error=' + (err && err.message));
 
     const local = inspectInput(str);
     if (local.blocked) {

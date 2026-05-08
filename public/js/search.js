@@ -1,43 +1,9 @@
-function displaySearchResults(result) {
-  const resultsContainer = document.getElementById('searchResults');
-  const messageBox = document.getElementById('messageBox');
-  if (!resultsContainer || !messageBox) return;
-
-  resultsContainer.innerHTML = '';
-  messageBox.textContent = '';
-  messageBox.className = '';
-
-  // WAF blocked
-  if (result.blocked === true) {
-    messageBox.className = 'waf-blocked';
-    messageBox.innerHTML = `
-      <div style="background:#1a0a0a;border:1px solid #e53e3e;border-radius:8px;padding:16px;color:#fc8181;font-family:sans-serif">
-        <div style="font-size:1.1rem;font-weight:700;margin-bottom:8px">&#x1F6A8; Request Blocked by AI Firewall</div>
-        <div style="margin-bottom:4px"><b>Attack Type:</b> ${escHtml(result.attack_type || 'Unknown')}</div>
-        <div style="margin-bottom:4px"><b>Confidence:</b> ${result.confidence ? (result.confidence * 100).toFixed(1) + '%' : 'N/A'}</div>
-        <div style="margin-top:8px;padding:10px;background:#2d1515;border-radius:6px;font-size:0.9rem;line-height:1.5;color:#fca5a5">
-          <b>Explanation:</b><br>${escHtml(result.explanation || '')}
-        </div>
-      </div>`;
-    return;
-  }
-
-  if (result.error) {
-    messageBox.textContent = result.error;
-    return;
-  }
-
-  const heading = document.createElement('h2');
-  heading.textContent = `Search Results for: ${result.searchTerm}`;
-  resultsContainer.appendChild(heading);
-
-  result.results.forEach((item) => {
-    const row = document.createElement('div');
-    row.className = 'story';
-    row.innerHTML = `<h3>${escHtml(item.title)}</h3><p>${escHtml(item.description)}</p>`;
-    resultsContainer.appendChild(row);
-  });
-}
+/**
+ * search.js
+ * Handles the search form. Sends input to /api/search (server-side).
+ * The server calls the AI firewall — ALL blocks are logged to the admin dashboard.
+ * Client-side NEVER blocks on its own; it only displays what the server returns.
+ */
 
 function escHtml(str) {
   return String(str || '')
@@ -47,41 +13,74 @@ function escHtml(str) {
     .replace(/"/g, '&quot;');
 }
 
+function showWafBlock(messageBox) {
+  messageBox.innerHTML = `
+    <div style="background:#1a0a0a;border:2px solid #e53e3e;border-radius:8px;padding:16px;color:#fc8181;font-family:sans-serif;margin-top:8px">
+      <div style="font-size:1.1rem;font-weight:700;margin-bottom:6px">&#x1F6A8; Your request was blocked by the security firewall.</div>
+      <div style="font-size:0.88rem;color:#fca5a5">Suspicious input was detected and logged. If this was a mistake, contact the administrator.</div>
+    </div>`;
+}
+
 async function performSearch(query) {
-  const messageBox = document.getElementById('messageBox');
+  const messageBox     = document.getElementById('messageBox');
   const resultsContainer = document.getElementById('searchResults');
   if (!messageBox || !resultsContainer) return;
 
-  messageBox.textContent = 'Searching...';
+  messageBox.innerHTML     = '<span style="color:#aaa">Searching...</span>';
   resultsContainer.innerHTML = '';
 
   try {
-    const response = await fetch('/api/search', {
+    const res = await fetch('/api/search', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ searchFor: query })
     });
 
-    const data = await response.json();
-    displaySearchResults(data);
-  } catch (error) {
-    messageBox.textContent = 'Unable to complete search. Please try again later.';
+    const data = await res.json();
+
+    // ── WAF blocked (server already notified the firewall dashboard) ──────
+    if (data.blocked === true) {
+      showWafBlock(messageBox);
+      return;
+    }
+
+    messageBox.innerHTML = '';
+
+    // ── Show results ──────────────────────────────────────────────────────
+    if (data.results && data.results.length) {
+      const heading = document.createElement('h2');
+      heading.textContent = 'Search Results for: ' + data.searchTerm;
+      resultsContainer.appendChild(heading);
+
+      data.results.forEach((item) => {
+        const div = document.createElement('div');
+        div.className = 'story';
+        div.innerHTML = '<b>' + escHtml(item.title) + '</b><br>' + escHtml(item.description) + '<br><br>';
+        resultsContainer.appendChild(div);
+      });
+    } else {
+      messageBox.innerHTML = '<span style="color:#aaa">No results found.</span>';
+    }
+
+  } catch (err) {
+    messageBox.innerHTML = '<span style="color:red">&#x274C; Error connecting to server. Please try again.</span>';
   }
 }
 
 document.addEventListener('DOMContentLoaded', () => {
   const searchForm  = document.getElementById('searchForm');
   const searchInput = document.getElementById('searchFor');
-  const params = new URLSearchParams(window.location.search);
-  const query  = params.get('q');
 
-  if (query && searchInput) {
-    searchInput.value = query;
-    performSearch(query);
+  // Support ?q= in URL (sidebar "go" button)
+  const params = new URLSearchParams(window.location.search);
+  const urlQuery = params.get('q');
+  if (urlQuery && searchInput) {
+    searchInput.value = urlQuery;
+    performSearch(urlQuery);
   }
 
-  searchForm?.addEventListener('submit', (event) => {
-    event.preventDefault();
+  searchForm?.addEventListener('submit', (e) => {
+    e.preventDefault();
     const value = searchInput?.value.trim();
     if (value) performSearch(value);
   });

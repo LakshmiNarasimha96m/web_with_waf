@@ -1,3 +1,16 @@
+/**
+ * api/search.js
+ * 
+ * Flow:
+ * 1. Receive user input
+ * 2. Send to AI firewall (Render) via wafClient
+ * 3. If blocked  → firewall logs the alert internally + we log to Vercel console → return {blocked:true}
+ * 4. If allowed  → return search results
+ * 
+ * The client JS (search.js) ONLY displays {blocked:true}. It never decides to block.
+ * ALL logging happens here on the server → admin dashboard gets populated.
+ */
+
 import { checkWAF } from '../utils/wafClient.js';
 
 const sampleProducts = [
@@ -12,27 +25,32 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Only POST is allowed for search.' });
   }
 
-  const rawTerm   = req.body?.searchFor ?? '';
+  const rawTerm    = req.body?.searchFor ?? '';
   const searchTerm = String(rawTerm).trim();
 
-  // ── WAF check ────────────────────────────────────────────────────────────
+  if (!searchTerm) {
+    return res.status(400).json({ error: 'Search term is required.' });
+  }
+
+  // ── WAF CHECK (server-side, always) ─────────────────────────────────────
+  // checkWAF calls the AI firewall on Render.
+  // On block: firewall stores alert → visible on /admin dashboard.
+  // On firewall unreachable: falls back to local signature rules.
   const waf = await checkWAF(searchTerm, 'search');
   if (waf.blocked) {
     return res.status(403).json({
       blocked: true,
-      message: waf.message,
-      error: waf.message,
+      message: waf.message
     });
   }
 
-  // ── Normal search ────────────────────────────────────────────────────────
-  const results = sampleProducts.filter((item) => {
-    const lower = searchTerm.toLowerCase();
-    return (
+  // ── NORMAL SEARCH ────────────────────────────────────────────────────────
+  const lower   = searchTerm.toLowerCase();
+  const results = sampleProducts.filter(
+    (item) =>
       item.title.toLowerCase().includes(lower) ||
       item.description.toLowerCase().includes(lower)
-    );
-  });
+  );
 
   return res.status(200).json({
     searchTerm,
